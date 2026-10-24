@@ -1,0 +1,8 @@
+import { ArrowDown, ArrowRight, Archive, AudioLines, Check, FileArchive, FileImage, FileText, HardDrive, LockKeyhole, Zap } from 'lucide-react'
+export default function Hero() {
+  return (
+      <section className="hero container"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-dot"/> YOUR FILE WORKFLOW, SIMPLIFIED</div><h1>One File.<br/><span>Any Format.</span></h1><p>Convert documents, images and archives into the formats you need. Straightforward tools, right in your browser.</p><div className="hero-actions"><button className="button button-primary" onClick={() => document.getElementById('converter')?.scrollIntoView({ behavior: 'smooth' })}>Start converting <ArrowRight size={17}/></button><a className="button button-ghost" href="#formats">Explore formats <ArrowDown size={16}/></a></div><div className="hero-proof"><span><Zap size={15}/> Fast processing</span><span><LockKeyhole size={15}/> Local when possible</span><span><Check size={15}/> No account needed</span></div></div>
+        <div className="file-orbit" aria-label="Supported file types"><div className="orbit-ring ring-one"/><div className="orbit-ring ring-two"/><div className="orbit-center"><FileArchive size={38}/><b>AF</b></div><div className="file-chip chip-pdf"><FileText/><span>PDF</span></div><div className="file-chip chip-doc"><FileText/><span>DOCX</span></div><div className="file-chip chip-jpg"><FileImage/><span>JPG</span></div><div className="file-chip chip-zip"><Archive/><span>ZIP</span></div><div className="file-chip chip-mp3"><AudioLines/><span>MP3</span></div><div className="file-chip chip-7z"><HardDrive/><span>7Z</span></div><div className="orbit-caption">ONE TOOL. MORE POSSIBILITIES.</div></div>
+      </section>
+  )
+}
