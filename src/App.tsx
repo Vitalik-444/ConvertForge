@@ -4,7 +4,7 @@ import { categories } from './data/supportedFormats'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import Footer from './components/Footer'
-import { convertFile, createZip, downloadBlob, extensionOf, formatBytes, getTargets } from './services/conversionService'
+import { convertBatch, convertFile, createZip, downloadBlob, extensionOf, formatBytes, getBatchTargets, getTargets, isImageName, isZipName } from './services/conversionService'
 import type { Category, ConversionRecord } from './types/file'
 
 const iconMap = { archive: Archive, document: FileText, image: FileImage, audio: AudioLines, video: Film }
@@ -28,17 +28,20 @@ export default function App() {
   const [compression, setCompression] = useState(6)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentFile = files[0]
-  const targets = useMemo(() => currentFile ? getTargets(currentFile) : [], [currentFile])
+  const targets = useMemo(() => files.length > 1 ? getBatchTargets(files) : currentFile ? getTargets(currentFile) : [], [files, currentFile])
 
   useEffect(() => { localStorage.setItem('archiveforge-history', JSON.stringify(history.slice(0, 8))) }, [history])
+  useEffect(() => { if (target && !targets.includes(target)) setTarget('') }, [targets, target])
 
   function addFiles(incoming: FileList | File[]) {
     const selected = Array.from(incoming)
     if (!selected.length) return
     const tooLarge = selected.find(file => file.size > 100 * 1024 * 1024)
     if (tooLarge) { setError(`${tooLarge.name} is over the 100 MB browser limit.`); return }
-    setFiles(selected)
-    setCategory(selected[0].name.toLowerCase().endsWith('.zip') ? 'archive' : ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(extensionOf(selected[0].name)) ? 'image' : 'document')
+    const combined = [...files, ...selected]
+    setFiles(combined)
+    setCategory(isZipName(combined[0].name) ? 'archive' : isImageName(combined[0].name) ? 'image' : 'document')
+    if (inputRef.current) inputRef.current.value = ''
     setTarget('')
     setResult(null)
     setError('')
@@ -55,8 +58,12 @@ export default function App() {
       if (category === 'archive' && files.length > 1) {
         output = await createZip(files, compression)
         outputName = 'archiveforge-files.zip'
+      } else if (files.length > 1) {
+        const batch = await convertBatch(files, target, { quality, width, height, background, compression }, setProgress)
+        output = batch.blob
+        outputName = batch.name
       } else {
-        const converted = await convertFile(files[0], target, { quality, width, height, background })
+        const converted = await convertFile(files[0], target, { quality, width, height, background, compression })
         if (!converted.blob) throw new Error('No output file was created.')
         output = converted.blob
         outputName = converted.name
@@ -79,7 +86,7 @@ export default function App() {
   }
 
   const archiveMode = category === 'archive'
-  const isImage = category === 'image' || Boolean(currentFile && ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(extensionOf(currentFile.name)))
+  const isImage = category === 'image' || Boolean(currentFile && isImageName(currentFile.name))
   const multiFiles = archiveMode && files.length > 1
 
   return <div className="app-shell">
@@ -97,7 +104,7 @@ export default function App() {
           <div className="conversion-settings"><div className="step-label"><span>02</span><div><b>Choose output</b><small>Available formats depend on your file</small></div></div>
             {files.length > 1 && archiveMode ? <div className="multi-note"><Archive size={18}/><div><b>{files.length} files selected</b><span>They will be packed into a single ZIP archive.</span></div></div> : <div className="conversion-flow"><div className="format-box"><span>FROM</span><div><File size={18}/><b>{currentFile ? extensionOf(currentFile.name).toUpperCase() : '—'}</b></div><small>{currentFile ? currentFile.name : 'Upload a file first'}</small></div><div className="flow-arrow"><ArrowDownUp size={19}/></div><div className="format-box target-box"><span>CONVERT TO</span><div><ArrowRight size={18}/><select value={target} onChange={event => setTarget(event.target.value)} disabled={!targets.length}><option value="">Select format</option>{targets.map(item => <option key={item} value={item}>{item}</option>)}</select><ChevronDown size={15}/></div><small>{target ? `Output: .${target.toLowerCase()}` : 'Choose your output format'}</small></div></div>}
             {isImage && files.length > 0 && <div className="options-panel"><div className="option-heading">Image options <span>OPTIONAL</span></div><div className="options-grid"><label>Width (px)<input type="number" min="0" placeholder="Original" value={width || ''} onChange={event => setWidth(Math.max(0, Number(event.target.value)))}/></label><label>Height (px)<input type="number" min="0" placeholder="Original" value={height || ''} onChange={event => setHeight(Math.max(0, Number(event.target.value)))}/></label><label>Quality <div className="range-row"><input type="range" min="10" max="100" value={quality} onChange={event => setQuality(Number(event.target.value))}/><b>{quality}%</b></div></label><label>Background<input type="color" value={background} onChange={event => setBackground(event.target.value)}/></label></div></div>}
-            {archiveMode && files.length > 0 && <div className="options-panel compression-row"><label>ZIP compression level <b>{compression}</b><input type="range" min="1" max="9" value={compression} onChange={event => setCompression(Number(event.target.value))}/><small>Higher compression can take longer.</small></label></div>}
+            {(archiveMode || target === 'ZIP' || files.length > 1) && files.length > 0 && <div className="options-panel compression-row"><label>ZIP compression level <b>{compression}</b><input type="range" min="1" max="9" value={compression} onChange={event => setCompression(Number(event.target.value))}/><small>Higher compression can take longer.</small></label></div>}
             {error && <div className="error-banner"><CircleHelp size={18}/><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error"><X size={16}/></button></div>}
             {busy && <div className="progress-wrap"><div className="progress-copy"><span>Processing your file…</span><b>{progress}%</b></div><div className="progress-track"><span style={{ width: `${progress}%` }}/></div></div>}
             {result ? <div className="result-card"><div className="result-check"><Check size={22}/></div><div className="result-copy"><b>Conversion complete</b><span>{result.name} · {formatBytes(result.blob.size)}</span></div><button className="button button-primary" onClick={() => downloadBlob(result.blob, result.name)}>Download file <ArrowDown size={16}/></button><button className="icon-button" onClick={reset} aria-label="Convert another"><RefreshCw size={17}/></button></div> : <div className="convert-footer"><span><LockKeyhole size={14}/> Your files are not saved to an account.</span><div><button className="button button-ghost" onClick={reset} disabled={!files.length}>Clear</button><button className="button button-primary convert-button" disabled={!files.length || (!multiFiles && !target) || busy} onClick={runConversion}>{busy ? <><RefreshCw size={16} className="spin"/> Converting…</> : <>Convert now <ArrowRight size={17}/></>}</button></div></div>}
